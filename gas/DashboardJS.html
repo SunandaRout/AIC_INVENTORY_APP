@@ -1,0 +1,100 @@
+<script>
+const fmtMoney_ = (v) => {
+  const abs = Math.abs(v || 0);
+  if (abs >= 1e9) return '₹' + (v/1e9).toFixed(2) + 'B';
+  if (abs >= 1e7) return '₹' + (v/1e7).toFixed(2) + 'Cr';
+  if (abs >= 1e5) return '₹' + (v/1e5).toFixed(2) + 'L';
+  if (abs >= 1e3) return '₹' + (v/1e3).toFixed(1) + 'K';
+  return '₹' + Math.round(v||0);
+};
+const TEAL_SHADES_ = ['#14a5a0','#1c2b4a','#4fc3c7','#8aa0c9','#2e8b8a','#5b7fb5','#a7d8d6','#3f5a8a','#7fc6c3','#274472'];
+
+PAGE_RENDERERS.dashboard = function (container) {
+  container.innerHTML = `
+    <div class="page-head"><h2>Dashboard</h2><p>Key trends and business insights</p></div>
+    <div class="filters">
+      <select id="d-range">
+        <option value="this_year">This Year</option><option value="this_month">This Month</option>
+        <option value="last_month">Last Month</option><option value="this_quarter">This Quarter</option>
+        <option value="">All Time</option>
+      </select>
+      <select id="d-location"><option value="">All Locations</option></select>
+    </div>
+    <div class="kpi-row" id="d-kpis"></div>
+    <div class="grid3">
+      <div class="card"><h3>Sales Trend</h3><div class="chart-wrap" style="height:300px"><canvas id="d-trend"></canvas></div></div>
+      <div class="card"><h3>Top 10 Customers</h3><div id="d-topcust" style="max-height:300px;overflow:auto;"></div></div>
+      <div class="card"><h3>Purchase By Location</h3><div class="chart-wrap"><canvas id="d-purchloc"></canvas></div></div>
+    </div>
+    <div class="grid3">
+      <div class="card"><h3>Sales By Location</h3><div class="chart-wrap"><canvas id="d-salesloc"></canvas></div></div>
+      <div class="card"><h3>Sales By Category</h3><div class="chart-wrap"><canvas id="d-salescat"></canvas></div></div>
+      <div class="card"><h3>Sales By City</h3><div class="chart-wrap"><canvas id="d-salescity"></canvas></div></div>
+    </div>
+    <div class="grid3">
+      <div class="card"><h3>Top Products</h3><div class="chart-wrap"><canvas id="d-topprod"></canvas></div></div>
+      <div class="card"><h3>Inventory Stock</h3><div class="chart-wrap"><canvas id="d-inv"></canvas></div></div>
+      <div class="card"><h3>Payment Collection</h3><div class="chart-wrap"><canvas id="d-collection"></canvas></div></div>
+    </div>`;
+
+  function load() {
+    const filters = {
+      datePreset: document.getElementById('d-range').value || 'this_year',
+      locationId: document.getElementById('d-location').value || null,
+    };
+    call('getDashboardData', filters).then(renderAll);
+  }
+
+  function renderAll(d) {
+    document.getElementById('d-kpis').innerHTML = [
+      ['Total Sales', d.kpis.totalSales, '#14a5a0'],
+      ['Total Purchases', d.kpis.totalPurchases, '#4a6bd6'],
+      ['Net Profit', d.kpis.netProfit, d.kpis.netProfit<0?'#e0554f':'#2ea86b'],
+      ['Total Receivable', d.kpis.totalReceivable, '#c98a12'],
+      ['Total Payable', d.kpis.totalPayable, '#d3453f'],
+    ].map(([label,val,color]) => `
+      <div class="kpi-card"><div class="label">${label}</div>
+      <div class="value" style="color:${val<0?'#e0554f':'inherit'}">${fmtMoney_(val)}</div></div>`).join('') +
+      `<div class="kpi-card"><div class="label">Top Sales Location</div><div class="value">${d.kpis.topSalesLocation||'—'}</div></div>`;
+
+    renderChart_('d-trend', 'line', d.salesTrend.map(x=>x.month), [{data:d.salesTrend.map(x=>x.sales), borderColor:'#1c2b4a', backgroundColor:'rgba(28,43,74,.08)', fill:true, tension:.35}], true);
+
+    document.getElementById('d-topcust').innerHTML = d.topCustomers.map(c => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;">
+        <span>${c.name}</span><span style="background:#14a5a0;color:#fff;border-radius:6px;padding:3px 8px;font-weight:700;font-size:12px;">${fmtMoney_(c.value)}</span>
+      </div>`).join('') || '<p class="empty-state">No data</p>';
+
+    renderChart_('d-purchloc', 'doughnut', d.purchaseByLocation.map(x=>x.name), [{data:d.purchaseByLocation.map(x=>x.value), backgroundColor:TEAL_SHADES_}]);
+    renderChart_('d-salesloc', 'bar', d.salesByLocation.map(x=>x.name), [{data:d.salesByLocation.map(x=>x.value), backgroundColor:'#14a5a0'}]);
+    renderChart_('d-salescat', 'doughnut', d.salesByCategory.map(x=>x.name), [{data:d.salesByCategory.map(x=>x.value), backgroundColor:TEAL_SHADES_}]);
+    renderChart_('d-salescity', 'bar', d.salesByCity.map(x=>x.name), [{data:d.salesByCity.map(x=>x.value), backgroundColor:'#4a6bd6'}]);
+    renderChart_('d-topprod', 'bar', d.topProducts.map(x=>x.name), [{data:d.topProducts.map(x=>x.value), backgroundColor:'#c98a12'}], false, true);
+    renderChart_('d-inv', 'bar', d.inventoryStatus.map(x=>x.product), [
+      {label:'Stock', data:d.inventoryStatus.map(x=>x.stock), backgroundColor:'#14a5a0'},
+      {label:'Reorder', data:d.inventoryStatus.map(x=>x.reorder), backgroundColor:'#e0554f'}
+    ]);
+    const pc = d.paymentCollection || {};
+    renderChart_('d-collection', 'bar', ['Receivable','Received','Outstanding'],
+      [{data:[pc.total_receivable_raised||0, pc.total_received||0, pc.outstanding||0], backgroundColor:['#4a6bd6','#2ea86b','#e0554f']}]);
+  }
+
+  function renderChart_(id, type, labels, datasets, noLegend, horizontal) {
+    const ctx = document.getElementById(id);
+    if (AIC.charts[id]) AIC.charts[id].destroy();
+    AIC.charts[id] = new Chart(ctx, {
+      type, data: { labels, datasets },
+      options: {
+        indexAxis: horizontal ? 'y' : 'x',
+        maintainAspectRatio: false,
+        plugins: { legend: { display: datasets.length > 1 || type==='doughnut', position:'bottom', labels:{boxWidth:10,font:{size:10}} },
+          tooltip: { callbacks: { label: (c) => fmtMoney_(c.parsed.y ?? c.parsed.x ?? c.parsed) } } },
+        scales: type === 'doughnut' ? {} : { [horizontal?'x':'y']: { ticks: { callback: (v) => fmtMoney_(v) } } },
+      }
+    });
+  }
+
+  document.getElementById('d-range').addEventListener('change', load);
+  document.getElementById('d-location').addEventListener('change', load);
+  load();
+};
+</script>

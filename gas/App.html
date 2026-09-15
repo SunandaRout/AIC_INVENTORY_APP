@@ -1,0 +1,244 @@
+<script>
+/**
+ * App.html — client-side SPA logic.
+ * Talks to the server exclusively through call(action, ...args), which
+ * wraps google.script.run around Code.gs's api() router and always
+ * passes the session token first.
+ */
+const AIC = {
+  token: null,
+  session: null,
+  charts: {},
+};
+
+function call(action, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler((err) => { toast(err.message || String(err), true); reject(err); })
+      .api(action, AIC.token, ...args);
+  });
+}
+
+function toast(msg, isError) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = msg;
+  document.getElementById('toast-host') ? document.getElementById('toast-host').appendChild(el)
+    : document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ---------- Auth ----------
+AIC.login = function () {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  google.script.run
+    .withSuccessHandler((res) => {
+      AIC.token = res.token;
+      AIC.session = res;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-shell').style.display = 'flex';
+      document.getElementById('sidebar-user').textContent = res.name + ' · ' + res.role;
+      applyRolePermissions(res.role);
+      navigateTo('dashboard');
+    })
+    .withFailureHandler((err) => {
+      document.getElementById('login-error').textContent = err.message || 'Login failed';
+    })
+    .api('login', null, email, password); // login itself needs no token
+};
+
+AIC.logout = function () {
+  call('logout').then(() => location.reload());
+};
+
+const ROLE_PAGES = {
+  Admin: ['dashboard','inventory','suppliers','customers','purchases','sales','receipts','payments','reports','users','settings'],
+  Manager: ['dashboard','inventory','suppliers','customers','purchases','sales','reports'],
+  Staff: ['inventory','customers','sales','receipts'],
+  Viewer: ['dashboard','reports'],
+};
+function applyRolePermissions(role) {
+  const allowed = ROLE_PAGES[role] || [];
+  document.querySelectorAll('#nav-list a[data-page]').forEach(a => {
+    a.style.display = allowed.includes(a.dataset.page) ? '' : 'none';
+  });
+}
+
+// ---------- Router ----------
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#nav-list a[data-page]').forEach(a => {
+    a.addEventListener('click', () => navigateTo(a.dataset.page));
+  });
+});
+
+const PAGE_RENDERERS = {}; // populated by DashboardJS.html, and the generic table config below
+
+function navigateTo(page) {
+  document.querySelectorAll('#nav-list a[data-page]').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+  document.getElementById('sidebar').classList.remove('open');
+  const renderer = PAGE_RENDERERS[page];
+  const container = document.getElementById('page-content');
+  container.innerHTML = '<div class="empty-state"><span class="spinner" style="border-color:#1c2b4a;border-top-color:transparent"></span> Loading…</div>';
+  if (renderer) renderer(container);
+  else container.innerHTML = `<div class="empty-state">Page not implemented: ${page}</div>`;
+}
+
+// ---------- Modal ----------
+function openModal(html) {
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+}
+
+// =====================================================================
+// Generic CRUD table page — drives Inventory / Suppliers / Customers /
+// Receipts / Payments / Users so those five+ modules share one renderer
+// instead of five nearly-identical bespoke pages.
+// =====================================================================
+const TABLE_CONFIGS = {
+  suppliers: {
+    title: 'Suppliers', subtitle: 'Manage vendor accounts and payables',
+    listAction: 'listSuppliers', createAction: 'createSupplier', updateAction: 'updateSupplier', deleteAction: 'deleteSupplier',
+    idField: 'supplier_id',
+    columns: [['supplier_name','Name'],['phone','Phone'],['email','Email'],['city','City'],['gst_number','GST No.'],['status','Status']],
+    formFields: [
+      {key:'supplierName', label:'Supplier Name', required:true},
+      {key:'phone', label:'Phone'}, {key:'email', label:'Email'},
+      {key:'city', label:'City'}, {key:'gstNumber', label:'GST Number'},
+      {key:'openingBalance', label:'Opening Balance', type:'number'},
+    ],
+  },
+  customers: {
+    title: 'Customers', subtitle: 'Manage customer accounts and receivables',
+    listAction: 'listCustomers', createAction: 'createCustomer', updateAction: 'updateCustomer', deleteAction: 'deleteCustomer',
+    idField: 'customer_id',
+    columns: [['customer_name','Name'],['phone','Phone'],['email','Email'],['city','City'],['credit_limit','Credit Limit'],['status','Status']],
+    formFields: [
+      {key:'customerName', label:'Customer Name', required:true},
+      {key:'phone', label:'Phone'}, {key:'email', label:'Email'},
+      {key:'city', label:'City'}, {key:'creditLimit', label:'Credit Limit', type:'number'},
+      {key:'openingBalance', label:'Opening Balance', type:'number'},
+    ],
+  },
+  users: {
+    title: 'Users', subtitle: 'Admin, Manager, Staff and Viewer accounts',
+    listAction: 'listUsers', createAction: 'createUser', updateAction: 'updateUser', deleteAction: 'deleteUser',
+    idField: 'user_id',
+    columns: [['name','Name'],['email','Email'],['role','Role'],['status','Status']],
+    formFields: [
+      {key:'name', label:'Full Name', required:true},
+      {key:'email', label:'Email', required:true},
+      {key:'role', label:'Role', type:'select', options:['Admin','Manager','Staff','Viewer'], required:true},
+      {key:'tempPassword', label:'Temporary Password', type:'password', required:true},
+    ],
+  },
+};
+
+function renderTablePage(moduleKey) {
+  return function (container) {
+    const cfg = TABLE_CONFIGS[moduleKey];
+    call(cfg.listAction, {}).then(rows => {
+      const list = Array.isArray(rows) ? rows : (rows.rows || []);
+      container.innerHTML = `
+        <div class="page-head"><h2>${cfg.title}</h2><p>${cfg.subtitle}</p></div>
+        <div class="toolbar">
+          <input class="search-box" placeholder="Search ${cfg.title.toLowerCase()}…" id="tbl-search">
+          <button class="btn" onclick="openCreateForm('${moduleKey}')">+ Add ${cfg.title.slice(0,-1)}</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr>${cfg.columns.map(c => `<th>${c[1]}</th>`).join('')}<th>Actions</th></tr></thead>
+            <tbody id="tbl-body"></tbody>
+          </table>
+          <div id="tbl-empty" class="empty-state" style="display:none">No records found.</div>
+        </div>`;
+      const renderRows = (filtered) => {
+        document.getElementById('tbl-body').innerHTML = filtered.map(r => `
+          <tr>
+            ${cfg.columns.map(c => `<td>${statusBadge(c[0], r[c[0]])}</td>`).join('')}
+            <td>
+              ${cfg.updateAction ? `<button class="btn secondary" style="padding:5px 10px" onclick='openEditForm("${moduleKey}", ${JSON.stringify(r[cfg.idField])})'>Edit</button>` : ''}
+              ${cfg.deleteAction ? `<button class="btn secondary" style="padding:5px 10px" onclick='deleteRecord("${moduleKey}", ${JSON.stringify(r[cfg.idField])})'>Delete</button>` : ''}
+            </td>
+          </tr>`).join('');
+        document.getElementById('tbl-empty').style.display = filtered.length ? 'none' : 'block';
+      };
+      renderRows(list);
+      document.getElementById('tbl-search').addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        renderRows(list.filter(r => JSON.stringify(r).toLowerCase().includes(q)));
+      });
+      window['_tblCache_' + moduleKey] = list;
+    });
+  };
+}
+function statusBadge(colKey, value) {
+  if (colKey === 'status' && value) {
+    const cls = value === 'Active' ? 'in' : 'out';
+    return `<span class="badge ${cls}">${value}</span>`;
+  }
+  return value === null || value === undefined ? '' : value;
+}
+
+function openCreateForm(moduleKey) {
+  const cfg = TABLE_CONFIGS[moduleKey];
+  openModal(`
+    <h3>Add ${cfg.title.slice(0,-1)}</h3>
+    <form id="record-form">${cfg.formFields.map(f => formFieldHtml(f)).join('')}</form>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn" onclick="submitCreate('${moduleKey}')">Save</button>
+      <button class="btn secondary" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+function openEditForm(moduleKey, id) {
+  const cfg = TABLE_CONFIGS[moduleKey];
+  const record = (window['_tblCache_' + moduleKey] || []).find(r => String(r[cfg.idField]) === String(id));
+  openModal(`
+    <h3>Edit ${cfg.title.slice(0,-1)}</h3>
+    <form id="record-form">${cfg.formFields.filter(f=>f.key!=='tempPassword').map(f => formFieldHtml(f, record)).join('')}</form>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn" onclick="submitUpdate('${moduleKey}', ${JSON.stringify(id)})">Save Changes</button>
+      <button class="btn secondary" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+function formFieldHtml(f, record) {
+  const snakeGuess = f.key.replace(/([A-Z])/g, '_$1').toLowerCase();
+  const val = record ? (record[snakeGuess] ?? '') : '';
+  if (f.type === 'select') {
+    return `<div class="form-row"><label>${f.label}</label>
+      <select id="f-${f.key}">${f.options.map(o => `<option ${val===o?'selected':''}>${o}</option>`).join('')}</select></div>`;
+  }
+  return `<div class="form-row"><label>${f.label}</label>
+    <input id="f-${f.key}" type="${f.type||'text'}" value="${val}"></div>`;
+}
+function readForm(cfg) {
+  const data = {};
+  cfg.formFields.forEach(f => {
+    const el = document.getElementById('f-' + f.key);
+    if (!el) return;
+    data[f.key] = f.type === 'number' ? parseFloat(el.value || '0') : el.value;
+  });
+  return data;
+}
+function submitCreate(moduleKey) {
+  const cfg = TABLE_CONFIGS[moduleKey];
+  const data = readForm(cfg);
+  call(cfg.createAction, data).then(() => { closeModal(); toast('Created.'); navigateTo(moduleKey); });
+}
+function submitUpdate(moduleKey, id) {
+  const cfg = TABLE_CONFIGS[moduleKey];
+  const data = readForm(cfg);
+  call(cfg.updateAction, id, data).then(() => { closeModal(); toast('Updated.'); navigateTo(moduleKey); });
+}
+function deleteRecord(moduleKey, id) {
+  if (!confirm('Delete this record? This marks it inactive; it is not permanently erased.')) return;
+  const cfg = TABLE_CONFIGS[moduleKey];
+  call(cfg.deleteAction, id).then(() => { toast('Deleted.'); navigateTo(moduleKey); });
+}
+
+['suppliers','customers','users'].forEach(m => { PAGE_RENDERERS[m] = renderTablePage(m); });
+</script>

@@ -1,0 +1,196 @@
+<script>
+// ---------- Inventory (needs its own page: search/filter/pagination/CSV/status badges) ----------
+PAGE_RENDERERS.inventory = function (container) {
+  let state = { page: 1, search: '', status: '' };
+  function load() {
+    call('listInventory', { page: state.page, pageSize: 20, search: state.search, status: state.status || undefined })
+      .then(data => renderTable(data));
+  }
+  function renderTable(data) {
+    container.innerHTML = `
+      <div class="page-head"><h2>Inventory</h2><p>${data.total} products tracked across all locations</p></div>
+      <div class="toolbar">
+        <div style="display:flex;gap:8px;">
+          <input class="search-box" id="inv-search" placeholder="Search SKU or product…" value="${state.search}">
+          <select id="inv-status">
+            <option value="">All Status</option>
+            <option value="IN STOCK">In Stock</option>
+            <option value="LOW STOCK">Low Stock</option>
+            <option value="OUT OF STOCK">Out of Stock</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn secondary" id="inv-export">Export CSV</button>
+          <button class="btn" id="inv-add">+ Add Product</button>
+        </div>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>SKU</th><th>Product</th><th>Category</th><th>Location</th><th>Stock</th><th>Reorder</th><th>Value</th><th>Status</th></tr></thead>
+          <tbody>${data.rows.map(r => `
+            <tr>
+              <td>${r.sku}</td><td>${r.product_name}</td><td>${r.category_name}</td><td>${r.location_name}</td>
+              <td>${r.current_stock}</td><td>${r.reorder_level}</td><td>₹${Math.round(r.inventory_value).toLocaleString('en-IN')}</td>
+              <td><span class="badge ${r.stock_status==='IN STOCK'?'in':r.stock_status==='LOW STOCK'?'low':'out'}">${r.stock_status}</span></td>
+            </tr>`).join('') || `<tr><td colspan="8" class="empty-state">No matching products.</td></tr>`}
+          </tbody>
+        </table>
+        <div class="pagination">
+          <button ${state.page<=1?'disabled':''} onclick="AIC._invPrev()">Prev</button>
+          <span style="align-self:center;font-size:12.5px;color:var(--muted)">Page ${state.page}</span>
+          <button ${data.rows.length<20?'disabled':''} onclick="AIC._invNext()">Next</button>
+        </div>
+      </div>`;
+    document.getElementById('inv-search').addEventListener('change', e => { state.search = e.target.value; state.page = 1; load(); });
+    document.getElementById('inv-status').value = state.status;
+    document.getElementById('inv-status').addEventListener('change', e => { state.status = e.target.value; state.page = 1; load(); });
+    document.getElementById('inv-export').addEventListener('click', () => exportCsv());
+    document.getElementById('inv-add').addEventListener('click', () => openProductForm());
+  }
+  AIC._invPrev = () => { state.page--; load(); };
+  AIC._invNext = () => { state.page++; load(); };
+  function exportCsv() {
+    call('exportInventoryCsv', { search: state.search, status: state.status || undefined }).then(csv => {
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'inventory_export.csv'; a.click();
+    });
+  }
+  function openProductForm() {
+    openModal(`
+      <h3>Add Product</h3>
+      <form id="product-form">
+        <div class="form-row"><label>SKU</label><input id="pf-sku"></div>
+        <div class="form-row"><label>Product Name</label><input id="pf-name"></div>
+        <div class="form-row"><label>Category ID</label><input id="pf-cat" placeholder="e.g. CAT001"></div>
+        <div class="form-row"><label>Purchase Price</label><input id="pf-pp" type="number"></div>
+        <div class="form-row"><label>Sale Price</label><input id="pf-sp" type="number"></div>
+        <div class="form-row"><label>Reorder Level</label><input id="pf-reorder" type="number"></div>
+      </form>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="AIC._saveProduct()">Save</button>
+        <button class="btn secondary" onclick="closeModal()">Cancel</button>
+      </div>`);
+  }
+  AIC._saveProduct = () => {
+    call('createProduct', {
+      sku: document.getElementById('pf-sku').value,
+      productName: document.getElementById('pf-name').value,
+      categoryId: document.getElementById('pf-cat').value,
+      purchasePrice: parseFloat(document.getElementById('pf-pp').value || '0'),
+      salePrice: parseFloat(document.getElementById('pf-sp').value || '0'),
+      reorderLevel: parseFloat(document.getElementById('pf-reorder').value || '0'),
+    }).then(() => { closeModal(); toast('Product added.'); load(); });
+  };
+  load();
+};
+
+// ---------- Receipts / Payments (create-only list pages) ----------
+TABLE_CONFIGS.receipts = {
+  title: 'Receipts', subtitle: 'Money received from customers',
+  listAction: 'listReceipts', createAction: 'createReceipt', idField: 'receipt_id',
+  columns: [['receipt_date','Date'],['customer_name','Customer'],['amount','Amount'],['payment_method','Method'],['reference_number','Reference']],
+  formFields: [
+    {key:'customerId', label:'Customer ID', required:true},
+    {key:'receiptDate', label:'Date', type:'date', required:true},
+    {key:'amount', label:'Amount', type:'number', required:true},
+    {key:'paymentMethod', label:'Payment Method', type:'select', options:['Cash','Bank Transfer','UPI','Card','Cheque','Other']},
+    {key:'referenceNumber', label:'Reference Number'},
+  ],
+};
+TABLE_CONFIGS.payments = {
+  title: 'Payments', subtitle: 'Money paid to suppliers',
+  listAction: 'listPayments', createAction: 'createPayment', idField: 'payment_id',
+  columns: [['payment_date','Date'],['supplier_name','Supplier'],['amount','Amount'],['payment_method','Method'],['reference_number','Reference']],
+  formFields: [
+    {key:'supplierId', label:'Supplier ID', required:true},
+    {key:'paymentDate', label:'Date', type:'date', required:true},
+    {key:'amount', label:'Amount', type:'number', required:true},
+    {key:'paymentMethod', label:'Payment Method', type:'select', options:['Cash','Bank Transfer','UPI','Card','Cheque','Other']},
+    {key:'referenceNumber', label:'Reference Number'},
+  ],
+};
+PAGE_RENDERERS.receipts = renderTablePage('receipts');
+PAGE_RENDERERS.payments = renderTablePage('payments');
+
+// ---------- Reports ----------
+const REPORT_LIST = [
+  ['getSalesReport','Sales Report'], ['getPurchaseReport','Purchase Report'], ['getInventoryReport','Inventory Report'],
+  ['getCustomerOutstandingReport','Customer Outstanding'], ['getSupplierOutstandingReport','Supplier Outstanding'],
+  ['getProfitReport','Profit Report'], ['getLocationSalesReport','Location Sales Report'],
+  ['getCategorySalesReport','Category Sales Report'], ['getProductPerformanceReport','Product Performance'],
+  ['getPaymentReport','Payment Report'], ['getReceiptReport','Receipt Report'], ['getLowStockReport','Low Stock Report'],
+];
+PAGE_RENDERERS.reports = function (container) {
+  container.innerHTML = `
+    <div class="page-head"><h2>Reports</h2><p>Select a report to view — filters and export are per report</p></div>
+    <div class="filters">
+      <select id="rpt-select">${REPORT_LIST.map(r => `<option value="${r[0]}">${r[1]}</option>`).join('')}</select>
+      <select id="rpt-range">
+        <option value="this_year">This Year</option><option value="this_month">This Month</option>
+        <option value="last_month">Last Month</option><option value="this_quarter">This Quarter</option>
+        <option value="">All Time</option>
+      </select>
+      <button class="btn" id="rpt-run">Run</button>
+      <button class="btn secondary" id="rpt-export">Export CSV</button>
+    </div>
+    <div class="card"><div id="rpt-table" class="empty-state">Choose a report and click Run.</div></div>`;
+  let lastRows = [];
+  document.getElementById('rpt-run').addEventListener('click', () => {
+    const action = document.getElementById('rpt-select').value;
+    const range = document.getElementById('rpt-range').value;
+    call(action, { datePreset: range || 'this_year' }).then(rows => {
+      lastRows = rows;
+      if (!rows.length) { document.getElementById('rpt-table').innerHTML = '<div class="empty-state">No rows for this range.</div>'; return; }
+      const headers = Object.keys(rows[0]);
+      document.getElementById('rpt-table').innerHTML = `
+        <table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows.slice(0,200).map(r => `<tr>${headers.map(h=>`<td>${r[h] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table>
+        ${rows.length>200 ? `<p class="empty-state">Showing first 200 of ${rows.length} rows — export CSV for the full set.</p>` : ''}`;
+    });
+  });
+  document.getElementById('rpt-export').addEventListener('click', () => {
+    call('exportReportCsv', lastRows).then(csv => {
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'report.csv'; a.click();
+    });
+  });
+};
+
+// ---------- Settings ----------
+PAGE_RENDERERS.settings = function (container) {
+  container.innerHTML = `
+    <div class="page-head"><h2>Settings</h2><p>Connection status and Sheets ↔ SQL synchronization</p></div>
+    <div class="grid3">
+      <div class="card"><h3>Database</h3><div id="set-db">Checking…</div></div>
+      <div class="card"><h3>Google Sheets</h3><div id="set-sheets">Checking…</div></div>
+      <div class="card"><h3>Last Sync</h3><div id="set-sync">—</div></div>
+    </div>
+    <div class="card">
+      <h3>Manual Sync</h3>
+      <button class="btn" id="btn-sync">Run Full Sync Now</button>
+      <div id="sync-result" style="margin-top:14px;"></div>
+    </div>`;
+  call('testDatabaseConnection').then(r => {
+    document.getElementById('set-db').innerHTML = r.connected
+      ? '<span class="badge in">CONNECTED</span>' : `<span class="badge out">DISCONNECTED</span><p style="font-size:12px;color:var(--muted)">${r.error||''}</p>`;
+  });
+  call('testSheetsConnection').then(r => {
+    document.getElementById('set-sheets').innerHTML = r.connected
+      ? `<span class="badge in">CONNECTED</span><p style="font-size:12px;color:var(--muted)">${r.sheetName}</p>` : '<span class="badge out">DISCONNECTED</span>';
+  });
+  call('getLastSyncStatus').then(rows => {
+    document.getElementById('set-sync').innerHTML = rows.length
+      ? rows.slice(0,5).map(r => `<div style="font-size:12.5px;margin-bottom:6px;">${r.sheet_name}: <b>${r.status}</b> (${r.rows_inserted}+ / ${r.rows_updated}~ / ${r.rows_failed}✕) — ${r.finished_at}</div>`).join('')
+      : 'No sync runs yet.';
+  });
+  document.getElementById('btn-sync').addEventListener('click', () => {
+    document.getElementById('sync-result').innerHTML = '<span class="spinner" style="border-color:#1c2b4a;border-top-color:transparent"></span> Syncing…';
+    call('syncAllToSQL').then(results => {
+      document.getElementById('sync-result').innerHTML = Object.entries(results).map(([k,v]) =>
+        `<div style="font-size:12.5px;">${k}: ${v.status} (${v.inserted} new, ${v.updated} updated, ${v.failed} failed)</div>`).join('');
+      toast('Sync complete.');
+    });
+  });
+};
+</script>

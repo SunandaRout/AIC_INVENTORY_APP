@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div id="login-screen" style="display:flex;align-items:center;justify-content:center;height:100vh;">
+    <div class="card" style="width:340px;">
+      <h3>AIC Inventory App</h3>
+      <div class="form-row"><label>Email</label><input id="login-email" type="email"></div>
+      <div class="form-row"><label>Password</label><input id="login-password" type="password"
+        onkeydown="if(event.key==='Enter')AIC.login()"></div>
+      <button class="btn" style="width:100%" onclick="AIC.login()">Sign In</button>
+      <p id="login-error" style="color:#e0554f;font-size:12.5px;margin-top:8px;"></p>
+    </div>
+  </div>
+
+  <div class="app" id="app-shell" style="display:none;">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="logo">🏬</div><h1>AIC Inventory<br>App</h1></div>
+      <ul class="nav" id="nav-list">
+        <li><a data-page="dashboard" class="active">📊 Dashboard</a></li>
+        <li><a data-page="inventory">📦 Inventory</a></li>
+        <li><a data-page="suppliers">🚚 Suppliers</a></li>
+        <li><a data-page="customers">👥 Customers</a></li>
+        <li><a data-page="purchases">🧾 Purchases</a></li>
+        <li><a data-page="sales">📈 Sales</a></li>
+        <li><a data-page="receipts">📥 Receipts</a></li>
+        <li><a data-page="payments">💳 Payments</a></li>
+        <li><a data-page="reports">📑 Reports</a></li>
+        <li><a data-page="users">👤 Users</a></li>
+        <li><a data-page="settings">⚙️ Settings</a></li>
+        <li><a onclick="AIC.logout()">🚪 Logout</a></li>
+      </ul>
+      <div style="font-size:11px;color:#7d88a3;padding:14px 10px 0;" id="sidebar-user"></div>
+    </aside>
+    <main class="main">
+      <button class="menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰ Menu</button>
+      <div id="page-content"><div class="empty-state">Loading…</div></div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal" id="modal-body"></div>
+  </div>
+
+  <div id="toast-host"></div>
+
+  <?!= include('ChartLib'); ?>
+  <?!= include('App'); ?>
+  <?!= include('App2'); ?>
+  <?!= include('App3'); ?>
+  <?!= include('DashboardJS'); ?>
+</body>
+</html>

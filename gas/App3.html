@@ -1,0 +1,106 @@
+<script>
+// ---------- Purchases & Sales: shared multi-item invoice builder ----------
+function renderInvoicePage(kind) {
+  const isSale = kind === 'sales';
+  const listAction = isSale ? 'listSales' : 'listPurchases';
+  const createAction = isSale ? 'createSale' : 'createPurchase';
+  const partyLabel = isSale ? 'Customer' : 'Supplier';
+  const partyKey = isSale ? 'customerId' : 'supplierId';
+  const dateKey = isSale ? 'saleDate' : 'purchaseDate';
+
+  return function (container) {
+    call(listAction, {}).then(rows => {
+      container.innerHTML = `
+        <div class="page-head"><h2>${isSale ? 'Sales' : 'Purchases'}</h2><p>${isSale ? 'Sales invoices' : 'Purchase invoices'} — multi-item, auto-totalled</p></div>
+        <div class="toolbar">
+          <span></span>
+          <button class="btn" id="new-invoice">+ New ${isSale ? 'Sale' : 'Purchase'}</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>${isSale?'Sale ID':'Purchase ID'}</th><th>Date</th><th>${partyLabel}</th><th>Total</th><th>Status</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+                <td>${r[isSale?'sale_id':'purchase_id']}</td><td>${r[dateKey.replace('Id','_date')] || r[isSale?'sale_date':'purchase_date']}</td>
+                <td>${r[isSale?'customer_name':'supplier_name']}</td>
+                <td>₹${Math.round(r.total_amount).toLocaleString('en-IN')}</td>
+                <td><span class="badge ${r.payment_status==='Paid'?'in':r.payment_status==='Partial'?'low':'out'}">${r.payment_status}</span></td>
+              </tr>`).join('') || `<tr><td colspan="5" class="empty-state">No ${isSale?'sales':'purchases'} yet.</td></tr>`}
+            </tbody>
+          </table>
+        </div>`;
+      document.getElementById('new-invoice').addEventListener('click', () => openInvoiceForm());
+    });
+
+    function openInvoiceForm() {
+      let items = [{ productId: '', quantity: 1, unitPrice: 0, discount: 0, tax: 0 }];
+      openModal(buildInvoiceHtml());
+      wireInvoiceEvents();
+
+      function buildInvoiceHtml() {
+        return `
+          <h3>New ${isSale ? 'Sale' : 'Purchase'}</h3>
+          <div class="form-row"><label>${partyLabel} ID</label><input id="inv-party"></div>
+          <div class="form-row"><label>Date</label><input id="inv-date" type="date"></div>
+          <div class="form-row"><label>Location ID</label><input id="inv-location"></div>
+          <div class="form-row"><label>Invoice Number</label><input id="inv-number"></div>
+          <table style="margin-bottom:10px;">
+            <thead><tr><th>Product ID</th><th>Qty</th><th>Unit ₹</th><th>Disc</th><th>Tax</th><th></th></tr></thead>
+            <tbody id="inv-items"></tbody>
+          </table>
+          <button class="btn secondary" id="inv-add-item" type="button">+ Add Line</button>
+          <div style="text-align:right;margin-top:10px;font-weight:700;" id="inv-total">Total: ₹0</div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn" id="inv-save">Save ${isSale ? 'Sale' : 'Purchase'}</button>
+            <button class="btn secondary" onclick="closeModal()">Cancel</button>
+          </div>`;
+      }
+      function renderItemRows() {
+        document.getElementById('inv-items').innerHTML = items.map((it, i) => `
+          <tr>
+            <td><input style="width:80px" data-i="${i}" data-f="productId" value="${it.productId}"></td>
+            <td><input style="width:50px" type="number" data-i="${i}" data-f="quantity" value="${it.quantity}"></td>
+            <td><input style="width:60px" type="number" data-i="${i}" data-f="unitPrice" value="${it.unitPrice}"></td>
+            <td><input style="width:50px" type="number" data-i="${i}" data-f="discount" value="${it.discount}"></td>
+            <td><input style="width:50px" type="number" data-i="${i}" data-f="tax" value="${it.tax}"></td>
+            <td><button class="btn secondary" style="padding:4px 8px" onclick="AIC._invRemove(${i})">✕</button></td>
+          </tr>`).join('');
+        document.querySelectorAll('#inv-items input').forEach(inp => {
+          inp.addEventListener('input', (e) => {
+            const i = parseInt(e.target.dataset.i, 10), f = e.target.dataset.f;
+            items[i][f] = (f === 'productId') ? e.target.value : parseFloat(e.target.value || '0');
+            updateTotal();
+          });
+        });
+        updateTotal();
+      }
+      function updateTotal() {
+        const total = items.reduce((a, it) => a + (it.quantity * it.unitPrice - it.discount + it.tax), 0);
+        document.getElementById('inv-total').textContent = 'Total: ₹' + Math.round(total).toLocaleString('en-IN');
+      }
+      AIC._invRemove = (i) => { items.splice(i, 1); renderItemRows(); };
+
+      function wireInvoiceEvents() {
+        renderItemRows();
+        document.getElementById('inv-add-item').addEventListener('click', () => {
+          items.push({ productId: '', quantity: 1, unitPrice: 0, discount: 0, tax: 0 });
+          renderItemRows();
+        });
+        document.getElementById('inv-save').addEventListener('click', () => {
+          const payload = {
+            [partyKey]: document.getElementById('inv-party').value,
+            [dateKey]: document.getElementById('inv-date').value,
+            locationId: document.getElementById('inv-location').value,
+            invoiceNumber: document.getElementById('inv-number').value,
+            items,
+          };
+          call(createAction, payload).then(() => {
+            closeModal(); toast(`${isSale ? 'Sale' : 'Purchase'} created.`); navigateTo(kind);
+          });
+        });
+      }
+    }
+  };
+}
+PAGE_RENDERERS.sales = renderInvoicePage('sales');
+PAGE_RENDERERS.purchases = renderInvoicePage('purchases');
+</script>

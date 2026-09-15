@@ -1,0 +1,38 @@
+-- =====================================================================
+-- Seeding aic_inventory from your Google Sheets export
+-- =====================================================================
+-- You have two ways to get data into SQL:
+--
+-- 1) One-time bulk load (recommended for the initial 40k+ transaction
+--    rows in your current dataset) — export each sheet tab to CSV and
+--    LOAD DATA. This is far faster than doing it row-by-row through
+--    Apps Script for a first load.
+--
+--    Example (run per table, matching column order to the sheet):
+--
+--    LOAD DATA LOCAL INFILE 'categories.csv'
+--      INTO TABLE categories
+--      FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+--      LINES TERMINATED BY '\n'
+--      IGNORE 1 ROWS
+--      (category_id, category_name, description, status);
+--
+--    Repeat in this order (respects foreign keys):
+--      locations, categories, users
+--      -> suppliers, customers
+--      -> products
+--      -> inventory
+--      -> purchases, purchase_items
+--      -> sales, sale_items
+--      -> receipts, payments
+--
+-- 2) Ongoing sync — after the first bulk load, Sync.gs's
+--    syncXToSQL() functions handle new/changed rows going forward
+--    (see Sync.gs). Don't run LOAD DATA again after that; let the
+--    sync functions own inserts/updates so you don't duplicate rows.
+--
+-- A minimal admin user so you can log in the first time
+-- (change the password immediately after first login):
+INSERT INTO users (user_id, name, email, password_hash, role, status)
+VALUES ('USR001', 'Admin', 'admin@example.com', '<bcrypt-hash-here>', 'Admin', 'Active')
+ON DUPLICATE KEY UPDATE name = VALUES(name);
