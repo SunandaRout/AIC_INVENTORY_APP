@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIC Inventory App — Dashboard</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:#f3f6fa;color:#17233c}.app{display:flex;min-height:100vh}.side{width:240px;background:linear-gradient(180deg,#182947,#111d34);color:#fff;padding:24px 16px}.brand{font-size:20px;font-weight:800;padding:10px 12px 28px}.nav{padding:10px 12px;border-radius:10px;background:#14a5a0;font-weight:700}.main{flex:1;padding:32px;overflow:auto}.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.head h1{margin:0;font-size:28px}.head p{margin:6px 0 0;color:#718096}.badge{background:#e7faf8;color:#087f7b;padding:8px 12px;border-radius:20px;font-size:13px;font-weight:700}.grid{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:16px}.card{background:#fff;border:1px solid #e5e9f0;border-radius:15px;padding:20px;box-shadow:0 3px 14px rgba(23,35,60,.06)}.label{font-size:13px;color:#778399;font-weight:600}.value{font-size:25px;font-weight:800;margin-top:9px}.section{margin-top:20px;display:grid;grid-template-columns:2fr 1fr;gap:16px}.bar{height:34px;background:#edf2f7;border-radius:8px;margin:12px 0;overflow:hidden}.fill{height:100%;background:#14a5a0;border-radius:8px}.row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}.note{margin-top:20px;color:#718096;font-size:13px}.btn{display:inline-block;margin-top:18px;padding:11px 15px;border-radius:9px;background:#182947;color:white;text-decoration:none;font-weight:700}@media(max-width:800px){.side{display:none}.main{padding:20px}.grid{grid-template-columns:repeat(2,1fr)}.section{grid-template-columns:1fr}}@media(max-width:500px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side"><div class="brand">📦 AIC Inventory</div><div class="nav">📊 Dashboard</div></aside>
+<main class="main">
+<div class="head"><div><h1>Inventory Dashboard</h1><p>Business analytics overview</p></div><span class="badge">● Dashboard Online</span></div>
+<div class="grid">
+<div class="card"><div class="label">Total Sales</div><div class="value">₹95.43B</div></div>
+<div class="card"><div class="label">Total Purchases</div><div class="value">₹97.04B</div></div>
+<div class="card"><div class="label">Net Profit</div><div class="value">₹28.61B</div></div>
+<div class="card"><div class="label">Inventory Value</div><div class="value">₹25.60B</div></div>
+<div class="card"><div class="label">Receivable</div><div class="value">₹92.97B</div></div>
+<div class="card"><div class="label">Payable</div><div class="value">₹94.64B</div></div>
+<div class="card"><div class="label">Total Products</div><div class="value">300</div></div>
+<div class="card"><div class="label">Customers</div><div class="value">500</div></div>
+</div>
+<div class="section">
+<div class="card"><h3>Top Sales Locations</h3>
+<div class="row"><span>Mumbai</span><b>₹4.23B</b></div><div class="bar"><div class="fill" style="width:100%"></div></div>
+<div class="row"><span>Pune</span><b>₹4.12B</b></div><div class="bar"><div class="fill" style="width:97.4%"></div></div>
+<div class="row"><span>Lucknow</span><b>₹4.08B</b></div><div class="bar"><div class="fill" style="width:96.4%"></div></div>
+<div class="row"><span>Kochi</span><b>₹4.07B</b></div><div class="bar"><div class="fill" style="width:96.4%"></div></div>
+<div class="row"><span>Bhubaneswar</span><b>₹3.93B</b></div><div class="bar"><div class="fill" style="width:92.9%"></div></div>
+</div>
+<div class="card"><h3>Inventory Status</h3><div class="row"><span>In Stock</span><b>271</b></div><div class="bar"><div class="fill" style="width:90.3%"></div></div><div class="row"><span>Low Stock</span><b>4</b></div><div class="bar"><div class="fill" style="width:1.4%"></div></div><div class="row"><span>Out of Stock</span><b>25</b></div><div class="bar"><div class="fill" style="width:8.3%"></div></div><a class="btn" href="README.md">Google Sheets Setup</a></div>
+</div>
+<p class="note">Static dashboard preview from the supplied dataset. For live Inventory / Sales / Purchases / Users data, deploy the <code>gas/</code> project as a Google Apps Script Web App and connect it to your Google Sheet.</p>
+</main></div>
+</body></html>
